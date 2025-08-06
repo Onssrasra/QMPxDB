@@ -14,89 +14,63 @@
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #f5f5f5;
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
 
         .container {
-            max-width: 1400px;
-            margin: 0 auto;
+            max-width: 600px;
+            width: 100%;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 40px;
         }
 
         .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: white;
-            padding: 30px;
             text-align: center;
+            margin-bottom: 40px;
         }
 
         .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 2em;
+            color: #2c3e50;
             font-weight: 300;
+            margin-bottom: 8px;
         }
 
         .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
-
-        .main-content {
-            display: flex;
-            height: calc(100vh - 200px);
+            color: #7f8c8d;
+            font-size: 1em;
         }
 
         .upload-section {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            border-right: 2px solid #ecf0f1;
-        }
-
-        .upload-header {
-            background: #3498db;
-            color: white;
-            padding: 20px;
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-
-        .upload-content {
-            flex: 1;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
+            margin-bottom: 30px;
         }
 
         .file-upload {
-            width: 100%;
-            max-width: 500px;
-            margin-bottom: 30px;
+            border: 2px dashed #e74c3c;
+            border-radius: 8px;
             padding: 40px 20px;
-            border: 3px dashed #3498db;
-            border-radius: 15px;
             text-align: center;
             cursor: pointer;
             transition: all 0.3s ease;
-            background: #f8f9fa;
+            background: #fafafa;
+            margin-bottom: 20px;
         }
 
         .file-upload:hover {
-            background: #e3f2fd;
-            border-color: #2980b9;
-            transform: translateY(-2px);
+            background: #f8f9fa;
+            border-color: #c0392b;
         }
 
         .file-upload.has-file {
             border-color: #27ae60;
-            background: #d5f4e6;
+            background: #f8f9fa;
         }
 
         .file-upload input {
@@ -104,15 +78,16 @@
         }
 
         .upload-icon {
-            font-size: 3em;
+            font-size: 2.5em;
             margin-bottom: 15px;
-            color: #3498db;
+            color: #e74c3c;
         }
 
         .upload-text {
             font-size: 1.1em;
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #2c3e50;
         }
 
         .upload-subtext {
@@ -123,71 +98,62 @@
         .button-container {
             display: flex;
             gap: 15px;
-            margin-top: 20px;
-            flex-wrap: wrap;
             justify-content: center;
+            margin-bottom: 20px;
         }
 
         .btn {
-            padding: 15px 30px;
+            padding: 12px 24px;
             border: none;
-            border-radius: 25px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 500;
             transition: all 0.3s ease;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .btn-primary {
-            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            background: #e74c3c;
             color: white;
         }
 
         .btn-primary:hover {
-            background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+            background: #c0392b;
         }
 
         .btn-success {
-            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            background: #27ae60;
             color: white;
         }
 
         .btn-success:hover {
-            background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+            background: #229954;
         }
 
         .btn:disabled {
             background: #bdc3c7;
             cursor: not-allowed;
-            transform: none;
-            box-shadow: none;
         }
 
         .progress-container {
             margin-top: 20px;
-            width: 100%;
-            max-width: 500px;
             display: none;
         }
 
         .progress-bar {
             width: 100%;
-            height: 8px;
+            height: 6px;
             background: #ecf0f1;
-            border-radius: 4px;
+            border-radius: 3px;
             overflow: hidden;
             margin-bottom: 10px;
         }
 
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #3498db, #27ae60);
+            background: #e74c3c;
             width: 0%;
             transition: width 0.3s ease;
         }
@@ -195,14 +161,15 @@
         .progress-text {
             text-align: center;
             color: #2c3e50;
-            font-weight: 500;
+            font-size: 0.9em;
         }
 
         .status-container {
             margin-top: 20px;
-            padding: 15px;
-            border-radius: 10px;
+            padding: 12px;
+            border-radius: 6px;
             display: none;
+            text-align: center;
         }
 
         .status-success {
@@ -217,83 +184,38 @@
             color: #e74c3c;
         }
 
-        .results-section {
-            flex: 2;
-            display: flex;
-            flex-direction: column;
+        .color-legend {
+            margin-top: 30px;
+            padding: 20px;
             background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #e74c3c;
         }
 
-        .results-header {
-            background: #27ae60;
-            color: white;
-            padding: 20px;
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-
-        .results-content {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-        }
-
-        .info-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-        }
-
-        .info-card h3 {
+        .color-legend h3 {
             color: #2c3e50;
             margin-bottom: 15px;
-            border-bottom: 2px solid #3498db;
-            padding-bottom: 10px;
+            font-size: 1em;
+            font-weight: 500;
         }
 
-        .info-list {
-            list-style: none;
-            padding: 0;
-        }
-
-        .info-list li {
-            padding: 8px 0;
-            border-bottom: 1px solid #ecf0f1;
+        .legend-items {
             display: flex;
-            align-items: center;
-        }
-
-        .info-list li:last-child {
-            border-bottom: none;
-        }
-
-        .info-list li::before {
-            content: "✓";
-            color: #27ae60;
-            font-weight: bold;
-            margin-right: 10px;
-        }
-
-        .color-legend {
-            display: flex;
-            gap: 15px;
-            margin-top: 15px;
+            gap: 20px;
             flex-wrap: wrap;
         }
 
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 8px;
             font-size: 0.9em;
         }
 
         .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 4px;
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
         }
 
         .legend-green {
@@ -312,9 +234,8 @@
         }
 
         @media (max-width: 768px) {
-            .main-content {
-                flex-direction: column;
-                height: auto;
+            .container {
+                padding: 20px;
             }
             
             .button-container {
@@ -324,103 +245,71 @@
             .btn {
                 width: 100%;
             }
+            
+            .legend-items {
+                flex-direction: column;
+                gap: 10px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🚆 DB Produktdaten Vergleichstool</h1>
+            <h1>DB Produktdaten Vergleichstool</h1>
             <p>Automatischer Vergleich von Siemens-Produktdaten zwischen Excel-Tabelle und MyMobase</p>
         </div>
 
-        <div class="main-content">
-            <div class="upload-section">
-                <div class="upload-header">
-                    📁 Datei-Upload & Verarbeitung
+        <div class="upload-section">
+            <div class="file-upload" id="fileUpload">
+                <input type="file" id="excelFile" accept=".xlsx,.xls">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text" id="uploadText">
+                    Excel-Datei hier ablegen oder klicken zum Auswählen
                 </div>
-                
-                <div class="upload-content">
-                    <div class="file-upload" id="fileUpload">
-                        <input type="file" id="excelFile" accept=".xlsx,.xls">
-                        <div class="upload-icon">📄</div>
-                        <div class="upload-text" id="uploadText">
-                            Excel-Datei hier ablegen oder klicken zum Auswählen
-                        </div>
-                        <div class="upload-subtext">
-                            Unterstützte Formate: .xlsx, .xls<br>
-                            Header in Zeile 3, Daten ab Zeile 4
-                        </div>
-                    </div>
-
-                    <div class="button-container">
-                        <button id="processBtn" class="btn btn-primary" disabled>
-                            🔄 Verarbeiten
-                        </button>
-                        <button id="downloadBtn" class="btn btn-success" disabled>
-                            ⬇️ Herunterladen
-                        </button>
-                    </div>
-
-                    <div class="progress-container" id="progressContainer">
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressFill"></div>
-                        </div>
-                        <div class="progress-text" id="progressText">
-                            Bereit zur Verarbeitung...
-                        </div>
-                    </div>
-
-                    <div class="status-container" id="statusContainer">
-                        <div id="statusText"></div>
-                    </div>
+                <div class="upload-subtext">
+                    Unterstützte Formate: .xlsx, .xls<br>
+                    Header in Zeile 3, Daten ab Zeile 4
                 </div>
             </div>
 
-            <div class="results-section">
-                <div class="results-header">
-                    📊 Informationen & Status
+            <div class="button-container">
+                <button id="processBtn" class="btn btn-primary" disabled>
+                    Verarbeiten
+                </button>
+                <button id="downloadBtn" class="btn btn-success" disabled>
+                    Herunterladen
+                </button>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
                 </div>
-                
-                <div class="results-content">
-                    <div class="info-card">
-                        <h3>🎯 Funktionsweise</h3>
-                        <ul class="info-list">
-                            <li>Excel-Datei mit DB-Produktdaten hochladen</li>
-                            <li>Automatisches Web-Scraping von MyMobase per A2V-Nummer</li>
-                            <li>Vergleich der Daten zwischen Excel und Web</li>
-                            <li>Erweiterte Excel-Datei mit Web-Daten und Vergleichszeilen</li>
-                        </ul>
-                    </div>
+                <div class="progress-text" id="progressText">
+                    Bereit zur Verarbeitung...
+                </div>
+            </div>
 
-                    <div class="info-card">
-                        <h3>📋 Abnahmekriterien</h3>
-                        <ul class="info-list">
-                            <li>1:1-Übernahme der Originaltabelle (alle Blätter)</li>
-                            <li>Genau zwei neue Zeilen je Produkt (ab Zeile 4)</li>
-                            <li>Nur Spalten Z, E, C, S, U, V, W, P, N werden beschrieben</li>
-                            <li>Direkt-URL per A2V: https://www.mymobase.com/de/p/&lt;A2V&gt;</li>
-                            <li>Robuste Parser & Mapping inkl. „OHNE/N/N/N/N"</li>
-                        </ul>
-                    </div>
+            <div class="status-container" id="statusContainer">
+                <div id="statusText"></div>
+            </div>
+        </div>
 
-                    <div class="info-card">
-                        <h3>🎨 Farbmarkierung</h3>
-                        <div class="color-legend">
-                            <div class="legend-item">
-                                <div class="legend-color legend-green"></div>
-                                <span>Grün = Werte stimmen überein</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color legend-orange"></div>
-                                <span>Orange = Web-Wert nicht gefunden</span>
-                            </div>
-                            <div class="legend-item">
-                                <div class="legend-color legend-red"></div>
-                                <span>Rot = Abweichung gefunden</span>
-                            </div>
-                        </div>
-                    </div>
+        <div class="color-legend">
+            <h3>Farbmarkierung</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color legend-green"></div>
+                    <span>Grün = Werte stimmen überein</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color legend-orange"></div>
+                    <span>Orange = Web-Wert nicht gefunden</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color legend-red"></div>
+                    <span>Rot = Abweichung gefunden</span>
                 </div>
             </div>
         </div>
@@ -450,17 +339,14 @@
                 fileUpload.addEventListener('click', () => fileInput.click());
                 fileUpload.addEventListener('dragover', (e) => {
                     e.preventDefault();
-                    fileUpload.style.background = '#e3f2fd';
-                    fileUpload.style.transform = 'translateY(-2px)';
+                    fileUpload.style.background = '#f8f9fa';
                 });
                 fileUpload.addEventListener('dragleave', () => {
                     fileUpload.style.background = '';
-                    fileUpload.style.transform = '';
                 });
                 fileUpload.addEventListener('drop', (e) => {
                     e.preventDefault();
                     fileUpload.style.background = '';
-                    fileUpload.style.transform = '';
                     if (e.dataTransfer.files.length > 0) {
                         this.handleFileUpload(e.dataTransfer.files[0]);
                     }
@@ -475,15 +361,14 @@
 
             handleFileUpload(file) {
                 if (!file.name.match(/\.(xlsx|xls)$/)) {
-                    this.showStatus('❌ Bitte wählen Sie eine gültige Excel-Datei (.xlsx oder .xls)', 'error');
+                    this.showStatus('Bitte wählen Sie eine gültige Excel-Datei (.xlsx oder .xls)', 'error');
                     return;
                 }
 
                 this.excelData = file;
                 this.updateFileUploadUI(file);
-                this.showStatus(`✅ Datei "${file.name}" erfolgreich geladen`, 'success');
+                this.showStatus(`Datei "${file.name}" erfolgreich geladen`, 'success');
                 
-                // Enable process button
                 document.getElementById('processBtn').disabled = false;
                 document.getElementById('downloadBtn').disabled = true;
             }
@@ -493,12 +378,12 @@
                 const uploadText = document.getElementById('uploadText');
                 
                 fileUpload.classList.add('has-file');
-                uploadText.innerHTML = `✅ ${file.name}<br><small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>`;
+                uploadText.innerHTML = `${file.name}<br><small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>`;
             }
 
             async processFile() {
                 if (!this.excelData) {
-                    this.showStatus('❌ Bitte laden Sie zuerst eine Excel-Datei hoch', 'error');
+                    this.showStatus('Bitte laden Sie zuerst eine Excel-Datei hoch', 'error');
                     return;
                 }
 
@@ -509,10 +394,9 @@
 
                 processBtn.disabled = true;
                 progressContainer.style.display = 'block';
-                this.showStatus('🔄 Verarbeitung läuft...', 'success');
+                this.showStatus('Verarbeitung läuft...', 'success');
 
                 try {
-                    // Update progress
                     progressFill.style.width = '25%';
                     progressText.textContent = 'Datei wird hochgeladen...';
 
@@ -538,16 +422,15 @@
                     this.processedFile = blob;
 
                     progressFill.style.width = '100%';
-                    progressText.textContent = '✅ Verarbeitung erfolgreich abgeschlossen!';
+                    progressText.textContent = 'Verarbeitung erfolgreich abgeschlossen!';
 
-                    this.showStatus('✅ Verarbeitung erfolgreich! Sie können jetzt die Datei herunterladen.', 'success');
+                    this.showStatus('Verarbeitung erfolgreich! Sie können jetzt die Datei herunterladen.', 'success');
                     
-                    // Enable download button
                     document.getElementById('downloadBtn').disabled = false;
 
                 } catch (error) {
                     console.error('Verarbeitungsfehler:', error);
-                    this.showStatus(`❌ Fehler bei der Verarbeitung: ${error.message}`, 'error');
+                    this.showStatus(`Fehler bei der Verarbeitung: ${error.message}`, 'error');
                     progressText.textContent = 'Fehler aufgetreten';
                 } finally {
                     processBtn.disabled = false;
@@ -556,7 +439,7 @@
 
             downloadFile() {
                 if (!this.processedFile) {
-                    this.showStatus('❌ Keine verarbeitete Datei verfügbar', 'error');
+                    this.showStatus('Keine verarbeitete Datei verfügbar', 'error');
                     return;
                 }
 
@@ -570,7 +453,7 @@
                 
                 setTimeout(() => URL.revokeObjectURL(url), 2000);
                 
-                this.showStatus('✅ Download erfolgreich gestartet!', 'success');
+                this.showStatus('Download erfolgreich gestartet!', 'success');
             }
 
             showStatus(message, type) {
@@ -581,7 +464,6 @@
                 statusText.textContent = message;
                 statusContainer.style.display = 'block';
                 
-                // Auto-hide after 5 seconds for success messages
                 if (type === 'success') {
                     setTimeout(() => {
                         statusContainer.style.display = 'none';
@@ -590,7 +472,6 @@
             }
         }
 
-        // Initialize the application
         document.addEventListener('DOMContentLoaded', () => {
             new ProductComparisonTool();
         });
