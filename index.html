@@ -1,128 +1,599 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DB Produktdaten Vergleichstool (Batch)</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto; margin:0; background:#f6f8fb}
-    header{background:#2c3e50;color:#fff;padding:20px}
-    h1{margin:0;font-weight:600}
-    main{max-width:1200px;margin:30px auto;padding:20px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.06)}
-    .row{display:flex;gap:20px;flex-wrap:wrap}
-    .card{flex:1;min-width:320px;background:#fff;border:1px solid #eaeef3;border-radius:12px;padding:20px}
-    .upload{border:2px dashed #9b59b6;border-radius:12px;padding:30px;text-align:center;cursor:pointer}
-    .upload:hover{background:#fbf7ff}
-    .btn{background:#2e7d32;color:#fff;border:none;border-radius:10px;padding:12px 18px;cursor:pointer;font-weight:600}
-    .btn.secondary{background:#1565c0}
-    .btn[disabled]{background:#bfc9d9;cursor:not-allowed}
-    .muted{color:#667085;font-size:.95rem}
-    .progress{display:none;margin-top:12px}
-    .bar{height:10px;background:#eaeef3;border-radius:6px;overflow:hidden}
-    .bar>div{width:0%;height:100%;background:#3498db;transition:width .3s}
-    .status{margin-top:8px;font-size:.9rem;color:#555}
-    .ok{background:#d5f4e6;padding:4px 8px;border-radius:6px;display:inline-block}
-    .warn{background:#fff3cd;padding:4px 8px;border-radius:6px;display:inline-block}
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB Produktdaten Vergleichstool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: flex;
+            height: calc(100vh - 200px);
+        }
+
+        .upload-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 2px solid #ecf0f1;
+        }
+
+        .upload-header {
+            background: #3498db;
+            color: white;
+            padding: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .upload-content {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .file-upload {
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 30px;
+            padding: 40px 20px;
+            border: 3px dashed #3498db;
+            border-radius: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+
+        .file-upload:hover {
+            background: #e3f2fd;
+            border-color: #2980b9;
+            transform: translateY(-2px);
+        }
+
+        .file-upload.has-file {
+            border-color: #27ae60;
+            background: #d5f4e6;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+            color: #3498db;
+        }
+
+        .upload-text {
+            font-size: 1.1em;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #1f5f8b 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60 0%, #229954 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: linear-gradient(135deg, #229954 0%, #1e8449 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4);
+        }
+
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            width: 100%;
+            max-width: 500px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #27ae60);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .status-container {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .status-success {
+            background: #d5f4e6;
+            border: 1px solid #27ae60;
+            color: #27ae60;
+        }
+
+        .status-error {
+            background: #fdeaea;
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+        }
+
+        .results-section {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            background: #f8f9fa;
+        }
+
+        .results-header {
+            background: #27ae60;
+            color: white;
+            padding: 20px;
+            font-size: 1.2em;
+            font-weight: bold;
+        }
+
+        .results-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+
+        .info-card h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .info-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .info-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #ecf0f1;
+            display: flex;
+            align-items: center;
+        }
+
+        .info-list li:last-child {
+            border-bottom: none;
+        }
+
+        .info-list li::before {
+            content: "✓";
+            color: #27ae60;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .color-legend {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9em;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .legend-green {
+            background: #d5f4e6;
+            border: 1px solid #27ae60;
+        }
+
+        .legend-orange {
+            background: #fff3cd;
+            border: 1px solid #f39c12;
+        }
+
+        .legend-red {
+            background: #fdeaea;
+            border: 1px solid #e74c3c;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .button-container {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
-  <header>
-    <h1>🚆 DB Produktdaten Vergleichstool</h1>
-    <p class="muted">Upload → Verarbeiten (Scraping & Vergleich) → Download</p>
-  </header>
-  <main>
-    <div class="row">
-      <div class="card">
-        <div id="drop" class="upload">
-          <input id="file" type="file" accept=".xlsx,.xls" style="display:none"/>
-          <p>📁 <strong>Excel-Datei hier ablegen</strong> oder klicken</p>
-          <p class="muted">Header in Zeile 3, Daten ab Zeile 4. Spalten: Z, E, C, S, U, V, W, P, N</p>
+    <div class="container">
+        <div class="header">
+            <h1>🚆 DB Produktdaten Vergleichstool</h1>
+            <p>Automatischer Vergleich von Siemens-Produktdaten zwischen Excel-Tabelle und MyMobase</p>
         </div>
-        <div style="margin-top:16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <button id="process" class="btn" disabled>1) Verarbeiten</button>
-          <button id="download" class="btn secondary" disabled>2) Herunterladen</button>
-          <span id="filename" class="muted">Keine Datei gewählt</span>
+
+        <div class="main-content">
+            <div class="upload-section">
+                <div class="upload-header">
+                    📁 Datei-Upload & Verarbeitung
+                </div>
+                
+                <div class="upload-content">
+                    <div class="file-upload" id="fileUpload">
+                        <input type="file" id="excelFile" accept=".xlsx,.xls">
+                        <div class="upload-icon">📄</div>
+                        <div class="upload-text" id="uploadText">
+                            Excel-Datei hier ablegen oder klicken zum Auswählen
+                        </div>
+                        <div class="upload-subtext">
+                            Unterstützte Formate: .xlsx, .xls<br>
+                            Header in Zeile 3, Daten ab Zeile 4
+                        </div>
+                    </div>
+
+                    <div class="button-container">
+                        <button id="processBtn" class="btn btn-primary" disabled>
+                            🔄 Verarbeiten
+                        </button>
+                        <button id="downloadBtn" class="btn btn-success" disabled>
+                            ⬇️ Herunterladen
+                        </button>
+                    </div>
+
+                    <div class="progress-container" id="progressContainer">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">
+                            Bereit zur Verarbeitung...
+                        </div>
+                    </div>
+
+                    <div class="status-container" id="statusContainer">
+                        <div id="statusText"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="results-section">
+                <div class="results-header">
+                    📊 Informationen & Status
+                </div>
+                
+                <div class="results-content">
+                    <div class="info-card">
+                        <h3>🎯 Funktionsweise</h3>
+                        <ul class="info-list">
+                            <li>Excel-Datei mit DB-Produktdaten hochladen</li>
+                            <li>Automatisches Web-Scraping von MyMobase per A2V-Nummer</li>
+                            <li>Vergleich der Daten zwischen Excel und Web</li>
+                            <li>Erweiterte Excel-Datei mit Web-Daten und Vergleichszeilen</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>📋 Abnahmekriterien</h3>
+                        <ul class="info-list">
+                            <li>1:1-Übernahme der Originaltabelle (alle Blätter)</li>
+                            <li>Genau zwei neue Zeilen je Produkt (ab Zeile 4)</li>
+                            <li>Nur Spalten Z, E, C, S, U, V, W, P, N werden beschrieben</li>
+                            <li>Direkt-URL per A2V: https://www.mymobase.com/de/p/&lt;A2V&gt;</li>
+                            <li>Robuste Parser & Mapping inkl. „OHNE/N/N/N/N"</li>
+                        </ul>
+                    </div>
+
+                    <div class="info-card">
+                        <h3>🎨 Farbmarkierung</h3>
+                        <div class="color-legend">
+                            <div class="legend-item">
+                                <div class="legend-color legend-green"></div>
+                                <span>Grün = Werte stimmen überein</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color legend-orange"></div>
+                                <span>Orange = Web-Wert nicht gefunden</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color legend-red"></div>
+                                <span>Rot = Abweichung gefunden</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="progress" id="progress">
-          <div class="bar"><div id="barfill"></div></div>
-          <div class="status" id="status">Bitte warten – Web-Scraping läuft …</div>
-        </div>
-        <div style="margin-top:10px">
-          <span class="ok">Grün</span> gleich (strikt) &nbsp;&nbsp;
-          <span class="warn">Orange</span> fehlend / unklar &nbsp;&nbsp; 🔴 Rot = Abweichung
-        </div>
-      </div>
-      <div class="card">
-        <h3>Tipps zur Geschwindigkeit</h3>
-        <ul>
-          <li>Parallelisierung auf dem Server (Standard: 4 gleichzeitige Seiten)</li>
-          <li>Blockierte Bilder/CSS/Fonts für schnellere Seitenaufrufe</li>
-          <li>A2V-Dubletten werden per Cache nur einmal gescraped</li>
-        </ul>
-      </div>
     </div>
-  </main>
-  <script>
-    const drop = document.getElementById('drop');
-    const input = document.getElementById('file');
-    const btnProcess = document.getElementById('process');
-    const btnDownload = document.getElementById('download');
-    const filename = document.getElementById('filename');
-    const progress = document.getElementById('progress');
-    const barfill = document.getElementById('barfill');
-    const statusEl = document.getElementById('status');
 
-    let file = null;
-    let lastBlob = null;
+    <script>
+        class ProductComparisonTool {
+            constructor() {
+                this.excelData = null;
+                this.processedFile = null;
+                this.initializeEventListeners();
+                this.setupFileUpload();
+            }
 
-    drop.addEventListener('click', ()=> input.click());
-    drop.addEventListener('dragover', (e)=>{ e.preventDefault(); drop.style.background='#fbf7ff'; });
-    drop.addEventListener('dragleave', ()=> drop.style.background='');
-    drop.addEventListener('drop', (e)=>{
-      e.preventDefault(); drop.style.background='';
-      if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]);
-    });
-    input.addEventListener('change', ()=> input.files.length && setFile(input.files[0]));
+            initializeEventListeners() {
+                const processBtn = document.getElementById('processBtn');
+                const downloadBtn = document.getElementById('downloadBtn');
+                
+                processBtn.addEventListener('click', () => this.processFile());
+                downloadBtn.addEventListener('click', () => this.downloadFile());
+            }
 
-    function setFile(f){
-      if(!/\.(xlsx|xls)$/i.test(f.name)){ alert('Bitte .xlsx oder .xls wählen'); return; }
-      file = f; filename.textContent = `Gewählt: ${f.name} (${(f.size/1024/1024).toFixed(2)} MB)`;
-      btnProcess.disabled = false; btnDownload.disabled = true; lastBlob = null;
-    }
+            setupFileUpload() {
+                const fileUpload = document.getElementById('fileUpload');
+                const fileInput = document.getElementById('excelFile');
+                
+                fileUpload.addEventListener('click', () => fileInput.click());
+                fileUpload.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    fileUpload.style.background = '#e3f2fd';
+                    fileUpload.style.transform = 'translateY(-2px)';
+                });
+                fileUpload.addEventListener('dragleave', () => {
+                    fileUpload.style.background = '';
+                    fileUpload.style.transform = '';
+                });
+                fileUpload.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    fileUpload.style.background = '';
+                    fileUpload.style.transform = '';
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFileUpload(e.dataTransfer.files[0]);
+                    }
+                });
+                
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleFileUpload(e.target.files[0]);
+                    }
+                });
+            }
 
-    btnProcess.addEventListener('click', async ()=>{
-      if(!file) return;
-      btnProcess.disabled = true;
-      progress.style.display = 'block';
-      barfill.style.width = '15%'; statusEl.textContent = 'Upload läuft …';
+            handleFileUpload(file) {
+                if (!file.name.match(/\.(xlsx|xls)$/)) {
+                    this.showStatus('❌ Bitte wählen Sie eine gültige Excel-Datei (.xlsx oder .xls)', 'error');
+                    return;
+                }
 
-      const fd = new FormData();
-      fd.append('file', file);
+                this.excelData = file;
+                this.updateFileUploadUI(file);
+                this.showStatus(`✅ Datei "${file.name}" erfolgreich geladen`, 'success');
+                
+                // Enable process button
+                document.getElementById('processBtn').disabled = false;
+                document.getElementById('downloadBtn').disabled = true;
+            }
 
-      try{
-        const resp = await fetch('/api/process-excel', { method:'POST', body: fd });
-        if(!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        barfill.style.width = '70%'; statusEl.textContent = 'Verarbeitung abgeschlossen – Datei bereit zum Download';
-        lastBlob = await resp.blob();
-        btnDownload.disabled = false;
-        barfill.style.width = '100%'; statusEl.textContent = 'Fertig ✅';
-      }catch(e){
-        alert('Fehler: ' + e.message);
-        statusEl.textContent = 'Fehler – Details in Konsole';
-        console.error(e);
-      }finally{
-        btnProcess.disabled = false;
-      }
-    });
+            updateFileUploadUI(file) {
+                const fileUpload = document.getElementById('fileUpload');
+                const uploadText = document.getElementById('uploadText');
+                
+                fileUpload.classList.add('has-file');
+                uploadText.innerHTML = `✅ ${file.name}<br><small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>`;
+            }
 
-    btnDownload.addEventListener('click', ()=>{
-      if(!lastBlob){ alert('Bitte zuerst verarbeiten.'); return; }
-      const url = URL.createObjectURL(lastBlob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'DB_Produktvergleich_verarbeitet.xlsx';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(()=> URL.revokeObjectURL(url), 2000);
-    });
-  </script>
+            async processFile() {
+                if (!this.excelData) {
+                    this.showStatus('❌ Bitte laden Sie zuerst eine Excel-Datei hoch', 'error');
+                    return;
+                }
+
+                const processBtn = document.getElementById('processBtn');
+                const progressContainer = document.getElementById('progressContainer');
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+
+                processBtn.disabled = true;
+                progressContainer.style.display = 'block';
+                this.showStatus('🔄 Verarbeitung läuft...', 'success');
+
+                try {
+                    // Update progress
+                    progressFill.style.width = '25%';
+                    progressText.textContent = 'Datei wird hochgeladen...';
+
+                    const formData = new FormData();
+                    formData.append('file', this.excelData);
+
+                    progressFill.style.width = '50%';
+                    progressText.textContent = 'Web-Scraping läuft...';
+
+                    const response = await fetch('/api/process-excel', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    progressFill.style.width = '75%';
+                    progressText.textContent = 'Verarbeitung abgeschlossen...';
+
+                    const blob = await response.blob();
+                    this.processedFile = blob;
+
+                    progressFill.style.width = '100%';
+                    progressText.textContent = '✅ Verarbeitung erfolgreich abgeschlossen!';
+
+                    this.showStatus('✅ Verarbeitung erfolgreich! Sie können jetzt die Datei herunterladen.', 'success');
+                    
+                    // Enable download button
+                    document.getElementById('downloadBtn').disabled = false;
+
+                } catch (error) {
+                    console.error('Verarbeitungsfehler:', error);
+                    this.showStatus(`❌ Fehler bei der Verarbeitung: ${error.message}`, 'error');
+                    progressText.textContent = 'Fehler aufgetreten';
+                } finally {
+                    processBtn.disabled = false;
+                }
+            }
+
+            downloadFile() {
+                if (!this.processedFile) {
+                    this.showStatus('❌ Keine verarbeitete Datei verfügbar', 'error');
+                    return;
+                }
+
+                const url = URL.createObjectURL(this.processedFile);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'DB_Produktvergleich_verarbeitet.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                
+                this.showStatus('✅ Download erfolgreich gestartet!', 'success');
+            }
+
+            showStatus(message, type) {
+                const statusContainer = document.getElementById('statusContainer');
+                const statusText = document.getElementById('statusText');
+                
+                statusContainer.className = `status-container status-${type}`;
+                statusText.textContent = message;
+                statusContainer.style.display = 'block';
+                
+                // Auto-hide after 5 seconds for success messages
+                if (type === 'success') {
+                    setTimeout(() => {
+                        statusContainer.style.display = 'none';
+                    }, 5000);
+                }
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new ProductComparisonTool();
+        });
+    </script>
 </body>
-</html>
+</html> 
