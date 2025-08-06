@@ -1,470 +1,480 @@
-/* server.js - Backend mit Excel-Verarbeitung & Web-Scraping */
-
-const express = require('express');
-const { chromium } = require('playwright');
-const cors = require('cors');
-const helmet = require('helmet');
-const path = require('path');
-const multer = require('multer');
-const ExcelJS = require('exceljs');
-const { execSync } = require('child_process');
-
-const {
-  toNumber,
-  normalizeWeightToKg,
-  parseDimensionsToLBH,
-  normPartNo,
-  mapMaterialClassificationToExcel,
-  withinToleranceKG,
-  a2vUrl
-} = require('./utils');
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname));
-
-// ---- Scraper ----
-class SiemensProductScraper {
-  constructor() {
-    this.baseUrl = "https://www.mymobase.com/de/p/";
-    this.browser = null;
-  }
-  async initBrowser() {
-    if (!this.browser) {
-      try {
-        this.browser = await chromium.launch({
-          headless: true,
-          args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']
-        });
-      } catch (error) {
-        // try installing browsers on the fly
-        try {
-          execSync('npx playwright install --with-deps chromium', { stdio: 'inherit' });
-          this.browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-        } catch (e) {
-          throw new Error('Chromium konnte nicht gestartet werden. Bitte führen Sie "npm run install-browsers" aus.');
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB Produktdaten Vergleichstool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
-      }
-    }
-    return this.browser;
-  }
-  async closeBrowser() { if (this.browser) { await this.browser.close(); this.browser = null; } }
 
-  async scrapeProduct(a2v) {
-    const url = `${this.baseUrl}${a2v}`;
-    const result = {
-      URL: url,
-      A2V: a2v,
-      'Weitere Artikelnummer': 'Nicht gefunden',
-      Produkttitel: 'Nicht gefunden',
-      Gewicht: 'Nicht gefunden',
-      Abmessung: 'Nicht gefunden',
-      Werkstoff: 'Nicht gefunden',
-      Materialklassifizierung: 'Nicht gefunden',
-      Status: 'Init'
-    };
-    
-    try {
-      const browser = await this.initBrowser();
-      const page = await browser.newPage();
-      
-      // Set user agent to avoid detection
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-      
-      // Navigate with longer timeout and better error handling
-      await page.goto(url, { 
-        waitUntil: 'networkidle', 
-        timeout: 60000 
-      });
-
-      // Check if page exists (not 404)
-      const pageTitle = await page.title();
-      if (pageTitle.includes('404') || pageTitle.includes('nicht gefunden')) {
-        result.Status = 'Seite nicht gefunden (404)';
-        await page.close();
-        return result;
-      }
-
-      // Extract product title
-      try {
-        const titleSelectors = [
-          'h1',
-          '.product-title',
-          '.title',
-          '[data-testid="product-title"]',
-          'title'
-        ];
-        
-        for (const selector of titleSelectors) {
-          const titleElement = await page.$(selector);
-          if (titleElement) {
-            const title = await titleElement.textContent();
-            if (title && title.trim() && !title.includes('404')) {
-              result.Produkttitel = title.replace(' | MoBase', '').replace(' | Siemens Mobility', '').trim();
-              break;
-            }
-          }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
-      } catch (e) {
-        console.log(`Title extraction failed: ${e.message}`);
-      }
 
-      // Enhanced data extraction
-      const extractedData = await page.evaluate(() => {
-        function add(map, k, v) {
-          if (!k || !v) return;
-          const key = k.trim().toLowerCase();
-          const val = v.trim();
-          if (!map[key] && val.length > 0) map[key] = val;
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            padding: 40px;
         }
-        
-        const data = {};
-        
-        // Extract from tables
-        document.querySelectorAll('table').forEach(t => {
-          t.querySelectorAll('tr').forEach(tr => {
-            const tds = tr.querySelectorAll('td,th');
-            if (tds.length >= 2) {
-              add(data, tds[0].textContent, tds[1].textContent);
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            color: #2c3e50;
+            font-weight: 300;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: #7f8c8d;
+            font-size: 1em;
+        }
+
+        .upload-section {
+            margin-bottom: 30px;
+        }
+
+        .file-upload {
+            border: 2px dashed #e74c3c;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fafafa;
+            margin-bottom: 20px;
+        }
+
+        .file-upload:hover {
+            background: #f8f9fa;
+            border-color: #c0392b;
+        }
+
+        .file-upload.has-file {
+            border-color: #27ae60;
+            background: #f8f9fa;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+            color: #e74c3c;
+        }
+
+        .upload-text {
+            font-size: 1.1em;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #2c3e50;
+        }
+
+        .upload-subtext {
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        .button-container {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-primary {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #c0392b;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+        }
+
+        .btn:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #ecf0f1;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #e74c3c;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            text-align: center;
+            color: #2c3e50;
+            font-size: 0.9em;
+        }
+
+        .status-container {
+            margin-top: 20px;
+            padding: 12px;
+            border-radius: 6px;
+            display: none;
+            text-align: center;
+        }
+
+        .status-success {
+            background: #d5f4e6;
+            border: 1px solid #27ae60;
+            color: #27ae60;
+        }
+
+        .status-error {
+            background: #fdeaea;
+            border: 1px solid #e74c3c;
+            color: #e74c3c;
+        }
+
+        .color-legend {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border-left: 4px solid #e74c3c;
+        }
+
+        .color-legend h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1em;
+            font-weight: 500;
+        }
+
+        .legend-items {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        .legend-green {
+            background: #d5f4e6;
+            border: 1px solid #27ae60;
+        }
+
+        .legend-orange {
+            background: #fff3cd;
+            border: 1px solid #f39c12;
+        }
+
+        .legend-red {
+            background: #fdeaea;
+            border: 1px solid #e74c3c;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
             }
-          });
-        });
-        
-        // Extract from definition lists
-        document.querySelectorAll('dl').forEach(dl => {
-          const dts = dl.querySelectorAll('dt');
-          const dds = dl.querySelectorAll('dd');
-          for (let i = 0; i < Math.min(dts.length, dds.length); i++) {
-            add(data, dts[i].textContent, dds[i].textContent);
-          }
-        });
-        
-        // Extract from generic elements with colon
-        document.querySelectorAll('div, span, li, p').forEach(el => {
-          const txt = (el.textContent || '').trim();
-          const idx = txt.indexOf(':');
-          if (idx > 0 && idx < 100) {
-            const key = txt.slice(0, idx);
-            const val = txt.slice(idx + 1);
-            if (val && /\d|\w/.test(val)) {
-              add(data, key, val);
+            
+            .button-container {
+                flex-direction: column;
             }
-          }
-        });
-        
-        // Extract from specific Siemens Mobility selectors
-        const specificSelectors = [
-          '[data-testid="product-specifications"]',
-          '.product-specifications',
-          '.technical-data',
-          '.specifications'
-        ];
-        
-        specificSelectors.forEach(selector => {
-          const element = document.querySelector(selector);
-          if (element) {
-            element.querySelectorAll('*').forEach(el => {
-              const txt = (el.textContent || '').trim();
-              const idx = txt.indexOf(':');
-              if (idx > 0 && idx < 100) {
-                const key = txt.slice(0, idx);
-                const val = txt.slice(idx + 1);
-                if (val && /\d|\w/.test(val)) {
-                  add(data, key, val);
+            
+            .btn {
+                width: 100%;
+            }
+            
+            .legend-items {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>DB Produktdaten Vergleichstool</h1>
+            <p>Automatischer Vergleich von Siemens-Produktdaten zwischen Excel-Tabelle und MyMobase</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="file-upload" id="fileUpload">
+                <input type="file" id="excelFile" accept=".xlsx,.xls">
+                <div class="upload-icon">📄</div>
+                <div class="upload-text" id="uploadText">
+                    Excel-Datei hier ablegen oder klicken zum Auswählen
+                </div>
+                <div class="upload-subtext">
+                    Unterstützte Formate: .xlsx, .xls<br>
+                    Header in Zeile 3, Daten ab Zeile 4
+                </div>
+            </div>
+
+            <div class="button-container">
+                <button id="processBtn" class="btn btn-primary" disabled>
+                    Verarbeiten
+                </button>
+                <button id="downloadBtn" class="btn btn-success" disabled>
+                    Herunterladen
+                </button>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">
+                    Bereit zur Verarbeitung...
+                </div>
+            </div>
+
+            <div class="status-container" id="statusContainer">
+                <div id="statusText"></div>
+            </div>
+        </div>
+
+        <div class="color-legend">
+            <h3>Farbmarkierung</h3>
+            <div class="legend-items">
+                <div class="legend-item">
+                    <div class="legend-color legend-green"></div>
+                    <span>Grün = Werte stimmen überein</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color legend-orange"></div>
+                    <span>Orange = Web-Wert nicht gefunden</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color legend-red"></div>
+                    <span>Rot = Abweichung gefunden</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class ProductComparisonTool {
+            constructor() {
+                this.excelData = null;
+                this.processedFile = null;
+                this.initializeEventListeners();
+                this.setupFileUpload();
+            }
+
+            initializeEventListeners() {
+                const processBtn = document.getElementById('processBtn');
+                const downloadBtn = document.getElementById('downloadBtn');
+                
+                processBtn.addEventListener('click', () => this.processFile());
+                downloadBtn.addEventListener('click', () => this.downloadFile());
+            }
+
+            setupFileUpload() {
+                const fileUpload = document.getElementById('fileUpload');
+                const fileInput = document.getElementById('excelFile');
+                
+                fileUpload.addEventListener('click', () => fileInput.click());
+                fileUpload.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    fileUpload.style.background = '#f8f9fa';
+                });
+                fileUpload.addEventListener('dragleave', () => {
+                    fileUpload.style.background = '';
+                });
+                fileUpload.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    fileUpload.style.background = '';
+                    if (e.dataTransfer.files.length > 0) {
+                        this.handleFileUpload(e.dataTransfer.files[0]);
+                    }
+                });
+                
+                fileInput.addEventListener('change', (e) => {
+                    if (e.target.files.length > 0) {
+                        this.handleFileUpload(e.target.files[0]);
+                    }
+                });
+            }
+
+            handleFileUpload(file) {
+                if (!file.name.match(/\.(xlsx|xls)$/)) {
+                    this.showStatus('Bitte wählen Sie eine gültige Excel-Datei (.xlsx oder .xls)', 'error');
+                    return;
                 }
-              }
-            });
-          }
-        });
-        
-        return data;
-      });
 
-      // Enhanced data mapping with multiple fallbacks
-      function pick(keyContains) {
-        const keys = Object.keys(extractedData || {});
-        for (const k of keys) {
-          const low = k.toLowerCase();
-          let ok = true;
-          for (const needle of keyContains) {
-            if (!low.includes(needle)) {
-              ok = false;
-              break;
+                this.excelData = file;
+                this.updateFileUploadUI(file);
+                this.showStatus(`Datei "${file.name}" erfolgreich geladen`, 'success');
+                
+                document.getElementById('processBtn').disabled = false;
+                document.getElementById('downloadBtn').disabled = true;
             }
-          }
-          if (ok) return extractedData[k];
-        }
-        return null;
-      }
 
-      // Extract "Weitere Artikelnummer"
-      const weitere = pick(['weitere', 'artikelnummer']) || 
-                     pick(['additional', 'material', 'number']) || 
-                     pick(['part', 'number']) ||
-                     pick(['artikel', 'nummer']);
-      if (weitere) result['Weitere Artikelnummer'] = weitere;
+            updateFileUploadUI(file) {
+                const fileUpload = document.getElementById('fileUpload');
+                const uploadText = document.getElementById('uploadText');
+                
+                fileUpload.classList.add('has-file');
+                uploadText.innerHTML = `${file.name}<br><small>${(file.size / 1024 / 1024).toFixed(2)} MB</small>`;
+            }
 
-      // Extract dimensions
-      const abm = pick(['abmess']) || 
-                  pick(['dimension']) || 
-                  pick(['länge', 'breite', 'höhe']) ||
-                  pick(['length', 'width', 'height']);
-      if (abm) result.Abmessung = abm;
+            async processFile() {
+                if (!this.excelData) {
+                    this.showStatus('Bitte laden Sie zuerst eine Excel-Datei hoch', 'error');
+                    return;
+                }
 
-      // Extract weight
-      const gew = pick(['gewicht']) || 
-                  pick(['weight']) || 
-                  pick(['masse']);
-      if (gew) result.Gewicht = gew;
+                const processBtn = document.getElementById('processBtn');
+                const progressContainer = document.getElementById('progressContainer');
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
 
-      // Extract material
-      const werk = pick(['werkstoff']) || 
-                   (pick(['material']) && !pick(['material', 'klass'])) ||
-                   pick(['stoff']);
-      if (werk) result.Werkstoff = werk;
+                processBtn.disabled = true;
+                progressContainer.style.display = 'block';
+                this.showStatus('Verarbeitung läuft...', 'success');
 
-      // Extract material classification
-      const klass = pick(['material', 'klass']) || 
-                    pick(['material', 'class']) ||
-                    pick(['klassifizierung']);
-      if (klass) result.Materialklassifizierung = klass;
+                try {
+                    progressFill.style.width = '25%';
+                    progressText.textContent = 'Datei wird hochgeladen...';
 
-      result.Status = 'Erfolgreich';
-      await page.close();
-      
-    } catch (e) {
-      console.error(`Scraping error for ${a2v}:`, e.message);
-      result.Status = `Fehler: ${e.message}`;
-    }
-    
-    return result;
-  }
-}
-const scraper = new SiemensProductScraper();
+                    const formData = new FormData();
+                    formData.append('file', this.excelData);
 
-// ---- Helpers for comparison & row building ----
-const COLS = { Z:'Z', E:'E', C:'C', S:'S', U:'U', V:'V', W:'W', P:'P', N:'N' };
-const HEADER_ROW = 3;
-const FIRST_DATA_ROW = 4;
+                    progressFill.style.width = '50%';
+                    progressText.textContent = 'Web-Scraping läuft...';
 
-function cell(worksheet, col, row) { return worksheet.getCell(`${col}${row}`); }
+                    const response = await fetch('/api/process-excel', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-function statusCellFill(status) {
-  if (status === 'GREEN') return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFD5F4E6' } }; // green-ish
-  if (status === 'RED')   return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFDEAEA' } }; // red-ish
-  return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF3CD' } }; // orange-ish
-}
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
 
-function compareText(excel, web) {
-  if (!excel && !web) return { status:'ORANGE', comment:'Beide fehlen' };
-  if (!excel) return { status:'ORANGE', comment:'Excel fehlt' };
-  if (!web)   return { status:'ORANGE', comment:'Web fehlt' };
-  const a = String(excel).trim().toLowerCase().replace(/\s+/g,' ');
-  const b = String(web).trim().toLowerCase().replace(/\s+/g,' ');
-  return a === b ? { status:'GREEN', comment:'identisch' } : { status:'RED', comment:'abweichend' };
-}
+                    progressFill.style.width = '75%';
+                    progressText.textContent = 'Verarbeitung abgeschlossen...';
 
-function comparePartNo(excel, web) {
-  if (!excel && !web) return { status:'ORANGE', comment:'Beide fehlen' };
-  if (!excel) return { status:'ORANGE', comment:'Excel fehlt' };
-  if (!web)   return { status:'ORANGE', comment:'Web fehlt' };
-  return normPartNo(excel) === normPartNo(web)
-    ? { status:'GREEN', comment:'identisch (normalisiert)' }
-    : { status:'RED', comment:`abweichend: Excel ${excel} vs. Web ${web}` };
-}
+                    const blob = await response.blob();
+                    this.processedFile = blob;
 
-function compareWeight(excelVal, webVal) {
-  const exKg = normalizeWeightToKg(excelVal);
-  const wbKg = normalizeWeightToKg(webVal);
-  if (exKg == null && wbKg == null) return { status:'ORANGE', comment:'Beide fehlen' };
-  if (exKg == null) return { status:'ORANGE', comment:'Excel fehlt' };
-  if (wbKg == null) return { status:'ORANGE', comment:'Web fehlt/unklar' };
-  const ok = withinToleranceKG(exKg, wbKg, 5);
-  const diffPct = ((wbKg - exKg) / Math.max(1e-9, Math.abs(exKg))) * 100;
-  return ok
-    ? { status:'GREEN', comment:`Δ ${diffPct.toFixed(1)}%` }
-    : { status:'RED', comment:`Excel ${exKg.toFixed(3)} kg vs. Web ${wbKg.toFixed(3)} kg (${diffPct.toFixed(1)}%)` };
-}
+                    progressFill.style.width = '100%';
+                    progressText.textContent = 'Verarbeitung erfolgreich abgeschlossen!';
 
-function compareDimensions(excelU, excelV, excelW, webDimText) {
-  const L = toNumber(excelU); const B = toNumber(excelV); const H = toNumber(excelW);
-  const fromWeb = parseDimensionsToLBH(webDimText);
-  const allExcelPresent = L!=null && B!=null && H!=null;
-  const anyExcel = L!=null || B!=null || H!=null;
-  if (!anyExcel && !fromWeb.L && !fromWeb.B && !fromWeb.H) return { status:'ORANGE', comment:'Beide fehlen' };
-  if (!anyExcel) return { status:'ORANGE', comment:'Excel fehlt' };
-  if (!fromWeb.L && !fromWeb.B && !fromWeb.H) return { status:'ORANGE', comment:'Web fehlt/unklar' };
-  const eq = (a,b)=> (a!=null && b!=null && Math.abs(a-b) < 1e-6);
-  const match = eq(L, fromWeb.L) && eq(B, fromWeb.B) && eq(H, fromWeb.H);
-  return match
-    ? { status:'GREEN', comment:'L×B×H identisch (mm)' }
-    : { status:'RED', comment:`Excel ${L||''}×${B||''}×${H||''} mm vs. Web ${fromWeb.L||''}×${fromWeb.B||''}×${fromWeb.H||''} mm` };
-}
+                    this.showStatus('Verarbeitung erfolgreich! Sie können jetzt die Datei herunterladen.', 'success');
+                    
+                    document.getElementById('downloadBtn').disabled = false;
 
-function compareMaterialClass(excelN, webText) {
-  const mapped = mapMaterialClassificationToExcel(webText);
-  if (!excelN && !mapped) return { status:'ORANGE', comment:'Beide fehlen' };
-  if (!excelN) return { status:'ORANGE', comment:'Excel fehlt' };
-  if (!mapped) return { status:'ORANGE', comment:'Web nicht interpretierbar' };
-  return String(excelN).trim().toUpperCase() === mapped
-    ? { status:'GREEN', comment:'identisch' }
-    : { status:'RED', comment:`Excel ${excelN} vs. Web ${mapped}` };
-}
+                } catch (error) {
+                    console.error('Verarbeitungsfehler:', error);
+                    this.showStatus(`Fehler bei der Verarbeitung: ${error.message}`, 'error');
+                    progressText.textContent = 'Fehler aufgetreten';
+                } finally {
+                    processBtn.disabled = false;
+                }
+            }
 
-// ---- Routes ----
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+            downloadFile() {
+                if (!this.processedFile) {
+                    this.showStatus('Keine verarbeitete Datei verfügbar', 'error');
+                    return;
+                }
 
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    service: 'DB Produktvergleich API',
-    browser: scraper.browser ? 'Bereit' : 'Nicht initialisiert',
-    timestamp: new Date().toISOString()
-  });
-});
+                const url = URL.createObjectURL(this.processedFile);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'DB_Produktvergleich_verarbeitet.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                
+                this.showStatus('Download erfolgreich gestartet!', 'success');
+            }
 
-// File upload
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
-
-/**
- * POST /api/process-excel
- * multipart/form-data: file=<excel>
- * Returns processed Excel with two extra rows per product.
- */
-app.post('/api/process-excel', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ error: 'Bitte Excel-Datei hochladen (file).' });
-
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(req.file.buffer);
-
-    // Process every worksheet; only first may have DB layout but we keep 1:1
-    for (const ws of wb.worksheets) {
-      // Determine last row with data by scanning column C or Z
-      let lastRow = ws.lastRow?.number || 0;
-      // ensure header row exists
-      if (lastRow < HEADER_ROW) continue;
-
-      // Collect products start..end first to avoid index shift
-      const products = [];
-      for (let r = FIRST_DATA_ROW; r <= lastRow; r++) {
-        const anyValue = ['A','B','C','Z'].some(c => ws.getCell(`${c}${r}`).value && String(ws.getCell(`${c}${r}`).value).trim() !== '');
-        if (anyValue) products.push(r);
-      }
-
-      // Iterate from bottom to top to insert rows
-      for (let i = products.length - 1; i >= 0; i--) {
-        const r = products[i];
-
-        // Read Excel row fields
-        const A2V = ws.getCell(`${COLS.Z}${r}`).value;
-        const manufNoExcel = ws.getCell(`${COLS.E}${r}`).value;
-        const titleExcel = ws.getCell(`${COLS.C}${r}`).value;
-        const weightExcel = ws.getCell(`${COLS.S}${r}`).value;
-        const lenExcel = ws.getCell(`${COLS.U}${r}`).value;
-        const widExcel = ws.getCell(`${COLS.V}${r}`).value;
-        const heiExcel = ws.getCell(`${COLS.W}${r}`).value;
-        const werkstoffExcel = ws.getCell(`${COLS.P}${r}`).value;
-        const noteExcel = ws.getCell(`${COLS.N}${r}`).value;
-
-        // Scrape if we have A2V
-        let webData = {
-          URL: a2vUrl(A2V),
-          A2V,
-          'Weitere Artikelnummer': null,
-          Produkttitel: null,
-          Gewicht: null,
-          Abmessung: null,
-          Werkstoff: null,
-          Materialklassifizierung: null,
-          Status: 'Nicht versucht'
-        };
-        if (A2V && String(A2V).toUpperCase().startsWith('A2V')) {
-          webData = await scraper.scrapeProduct(String(A2V).trim());
+            showStatus(message, type) {
+                const statusContainer = document.getElementById('statusContainer');
+                const statusText = document.getElementById('statusText');
+                
+                statusContainer.className = `status-container status-${type}`;
+                statusText.textContent = message;
+                statusContainer.style.display = 'block';
+                
+                if (type === 'success') {
+                    setTimeout(() => {
+                        statusContainer.style.display = 'none';
+                    }, 5000);
+                }
+            }
         }
 
-        // ---- Insert two rows after r ----
-        const insertAt = r + 1;
-        ws.spliceRows(insertAt, 0, [null]); // Web-Daten
-        ws.spliceRows(insertAt + 1, 0, [null]); // Vergleich
-        const webRow = insertAt;
-        const cmpRow = insertAt + 1;
-
-        // Label cells (optional, we leave other cells empty)
-        // Fill Web-Daten row ONLY in allowed columns
-        ws.getCell(`${COLS.Z}${webRow}`).value = A2V || '';
-        ws.getCell(`${COLS.E}${webRow}`).value = webData['Weitere Artikelnummer'] || '';
-        ws.getCell(`${COLS.C}${webRow}`).value = webData.Produkttitel || '';
-        ws.getCell(`${COLS.S}${webRow}`).value = webData.Gewicht || '';
-        // Dimensions -> split to U/V/W
-        const dimParsed = parseDimensionsToLBH(webData.Abmessung);
-        if (dimParsed.L != null) ws.getCell(`${COLS.U}${webRow}`).value = dimParsed.L;
-        if (dimParsed.B != null) ws.getCell(`${COLS.V}${webRow}`).value = dimParsed.B;
-        if (dimParsed.H != null) ws.getCell(`${COLS.W}${webRow}`).value = dimParsed.H;
-        ws.getCell(`${COLS.P}${webRow}`).value = webData.Werkstoff || '';
-        ws.getCell(`${COLS.N}${webRow}`).value = mapMaterialClassificationToExcel(webData.Materialklassifizierung) || '';
-
-        // Comparison row ONLY in allowed columns (set status + short comment, plus background color)
-        // Z (A2V) - direct text compare
-        const cmpZ = compareText(A2V || '', webData.A2V || A2V || '');
-        ws.getCell(`${COLS.Z}${cmpRow}`).value = cmpZ.comment;
-        ws.getCell(`${COLS.Z}${cmpRow}`).fill = statusCellFill(cmpZ.status);
-
-        // E (Herstellerartikelnummer) vs "Weitere Artikelnummer"
-        const cmpE = comparePartNo(manufNoExcel || '', webData['Weitere Artikelnummer'] || '');
-        ws.getCell(`${COLS.E}${cmpRow}`).value = cmpE.comment;
-        ws.getCell(`${COLS.E}${cmpRow}`).fill = statusCellFill(cmpE.status);
-
-        // C (Material-Kurztext) vs Produkttitel
-        const cmpC = compareText(titleExcel || '', webData.Produkttitel || '');
-        ws.getCell(`${COLS.C}${cmpRow}`).value = cmpC.comment;
-        ws.getCell(`${COLS.C}${cmpRow}`).fill = statusCellFill(cmpC.status);
-
-        // S (Gewicht) ±5%
-        const cmpS = compareWeight(weightExcel, webData.Gewicht);
-        ws.getCell(`${COLS.S}${cmpRow}`).value = cmpS.comment;
-        ws.getCell(`${COLS.S}${cmpRow}`).fill = statusCellFill(cmpS.status);
-
-        // U/V/W (L/B/H) vs Abmessungen
-        const cmpDim = compareDimensions(lenExcel, widExcel, heiExcel, webData.Abmessung);
-        ws.getCell(`${COLS.U}${cmpRow}`).value = cmpDim.comment;
-        ws.getCell(`${COLS.U}${cmpRow}`).fill = statusCellFill(cmpDim.status);
-        // leave V/W empty per requirement (only allowed columns may be written; U/V/W are allowed, but we put comment in U)
-
-        // P (Werkstoff)
-        const cmpP = compareText(werkstoffExcel || '', webData.Werkstoff || '');
-        ws.getCell(`${COLS.P}${cmpRow}`).value = cmpP.comment;
-        ws.getCell(`${COLS.P}${cmpRow}`).fill = statusCellFill(cmpP.status);
-
-        // N (Materialklassifizierung mapping)
-        const cmpN = compareMaterialClass(noteExcel || '', webData.Materialklassifizierung || '');
-        ws.getCell(`${COLS.N}${cmpRow}`).value = cmpN.comment;
-        ws.getCell(`${COLS.N}${cmpRow}`).fill = statusCellFill(cmpN.status);
-      }
-    }
-
-    // Write to buffer and respond
-    const out = await wb.xlsx.writeBuffer();
-    const fileName = 'DB_Produktvergleich_verarbeitet.xlsx';
-    res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition',`attachment; filename="${fileName}"`);
-    res.send(Buffer.from(out));
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// graceful shutdown
-process.on('SIGINT', async () => { await scraper.closeBrowser(); process.exit(0); });
-process.on('SIGTERM', async () => { await scraper.closeBrowser(); process.exit(0); });
-
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-  console.log(`Health: http://localhost:${PORT}/api/health`);
-});
+        document.addEventListener('DOMContentLoaded', () => {
+            new ProductComparisonTool();
+        });
+    </script>
+</body>
+</html> 
