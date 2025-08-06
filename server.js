@@ -1,4 +1,4 @@
-/* server.js - Schnellere Batch-Verarbeitung + /api/scrape + strikter Vergleich */
+/* server.js - Backend mit Excel-Verarbeitung & Web-Scraping */
 
 const express = require('express');
 const { chromium } = require('playwright');
@@ -22,14 +22,9 @@ const {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ---- Tunables / Env ----
-const SCRAPE_CONCURRENCY = Number(process.env.SCRAPE_CONCURRENCY || 4);
-const WEIGHT_TOL_PCT = Number(process.env.WEIGHT_TOL_PCT || 0); // 0 = strikt
-const NAV_TIMEOUT_MS = Number(process.env.NAV_TIMEOUT_MS || 20000);
-
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json());
 app.use(express.static(__dirname));
 
 // ---- Scraper ----
@@ -37,10 +32,8 @@ class SiemensProductScraper {
   constructor() {
     this.baseUrl = "https://www.mymobase.com/de/p/";
     this.browser = null;
-    this.context = null;
-    this.cache = new Map(); // A2V -> result
   }
-  async init() {
+  async initBrowser() {
     if (!this.browser) {
       try {
         this.browser = await chromium.launch({
@@ -48,6 +41,7 @@ class SiemensProductScraper {
           args: ['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']
         });
       } catch (error) {
+        // try installing browsers on the fly
         try {
           execSync('npx playwright install --with-deps chromium', { stdio: 'inherit' });
           this.browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
@@ -56,37 +50,15 @@ class SiemensProductScraper {
         }
       }
     }
-    if (!this.context) {
-      this.context = await this.browser.newContext({
-        javaScriptEnabled: true,
-        bypassCSP: true,
-        viewport: { width: 1200, height: 900 },
-        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36'
-      });
-      // Blocke schwere Ressourcen für Speed
-      await this.context.route('**/*', (route) => {
-        const type = route.request().resourceType();
-        if (['image','stylesheet','font','media','websocket','other'].includes(type)) {
-          return route.abort();
-        }
-        return route.continue();
-      });
-    }
+    return this.browser;
   }
-  async close() {
-    if (this.context) { await this.context.close(); this.context = null; }
-    if (this.browser) { await this.browser.close(); this.browser = null; }
-  }
+  async closeBrowser() { if (this.browser) { await this.browser.close(); this.browser = null; } }
 
-  async scrapeOne(a2v) {
-    if (!a2v) return null;
-    const key = String(a2v).trim();
-    if (this.cache.has(key)) return this.cache.get(key);
-
-    const url = `${this.baseUrl}${key}`;
+  async scrapeProduct(a2v) {
+    const url = `${this.baseUrl}${a2v}`;
     const result = {
       URL: url,
-      A2V: key,
+      A2V: a2v,
       'Weitere Artikelnummer': 'Nicht gefunden',
       Produkttitel: 'Nicht gefunden',
       Gewicht: 'Nicht gefunden',
@@ -95,113 +67,196 @@ class SiemensProductScraper {
       Materialklassifizierung: 'Nicht gefunden',
       Status: 'Init'
     };
+    
     try {
-      await this.init();
-      const page = await this.context.newPage();
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
+      const browser = await this.initBrowser();
+      const page = await browser.newPage();
+      
+      // Set user agent to avoid detection
+      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+      
+      // Navigate with longer timeout and better error handling
+      await page.goto(url, { 
+        waitUntil: 'networkidle', 
+        timeout: 60000 
+      });
 
+      // Check if page exists (not 404)
+      const pageTitle = await page.title();
+      if (pageTitle.includes('404') || pageTitle.includes('nicht gefunden')) {
+        result.Status = 'Seite nicht gefunden (404)';
+        await page.close();
+        return result;
+      }
+
+      // Extract product title
       try {
-        const title = await page.title();
-        if (title && !title.includes('404')) result.Produkttitel = title.replace(' | MoBase','').trim();
-      } catch {}
+        const titleSelectors = [
+          'h1',
+          '.product-title',
+          '.title',
+          '[data-testid="product-title"]',
+          'title'
+        ];
+        
+        for (const selector of titleSelectors) {
+          const titleElement = await page.$(selector);
+          if (titleElement) {
+            const title = await titleElement.textContent();
+            if (title && title.trim() && !title.includes('404')) {
+              result.Produkttitel = title.replace(' | MoBase', '').replace(' | Siemens Mobility', '').trim();
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        console.log(`Title extraction failed: ${e.message}`);
+      }
 
-      const kvPairs = await page.evaluate(() => {
+      // Enhanced data extraction
+      const extractedData = await page.evaluate(() => {
         function add(map, k, v) {
           if (!k || !v) return;
           const key = k.trim().toLowerCase();
           const val = v.trim();
-          if (!map[key]) map[key] = val;
+          if (!map[key] && val.length > 0) map[key] = val;
         }
+        
         const data = {};
+        
+        // Extract from tables
         document.querySelectorAll('table').forEach(t => {
           t.querySelectorAll('tr').forEach(tr => {
             const tds = tr.querySelectorAll('td,th');
-            if (tds.length >= 2) add(data, tds[0].textContent, tds[1].textContent);
+            if (tds.length >= 2) {
+              add(data, tds[0].textContent, tds[1].textContent);
+            }
           });
         });
+        
+        // Extract from definition lists
         document.querySelectorAll('dl').forEach(dl => {
-          const dts = dl.querySelectorAll('dt'); const dds = dl.querySelectorAll('dd');
-          for (let i=0;i<Math.min(dts.length,dds.length);i++) add(data, dts[i].textContent, dds[i].textContent);
-        });
-        // Fallback: generische "Key: Value"-Texte
-        document.querySelectorAll('div,span,li').forEach(el => {
-          const txt = (el.textContent||'').trim();
-          const idx = txt.indexOf(':');
-          if (idx > 0 && idx < 80) {
-            const key = txt.slice(0, idx);
-            const val = txt.slice(idx+1);
-            if (val && /\d|\w/.test(val)) add(data, key, val);
+          const dts = dl.querySelectorAll('dt');
+          const dds = dl.querySelectorAll('dd');
+          for (let i = 0; i < Math.min(dts.length, dds.length); i++) {
+            add(data, dts[i].textContent, dds[i].textContent);
           }
         });
+        
+        // Extract from generic elements with colon
+        document.querySelectorAll('div, span, li, p').forEach(el => {
+          const txt = (el.textContent || '').trim();
+          const idx = txt.indexOf(':');
+          if (idx > 0 && idx < 100) {
+            const key = txt.slice(0, idx);
+            const val = txt.slice(idx + 1);
+            if (val && /\d|\w/.test(val)) {
+              add(data, key, val);
+            }
+          }
+        });
+        
+        // Extract from specific Siemens Mobility selectors
+        const specificSelectors = [
+          '[data-testid="product-specifications"]',
+          '.product-specifications',
+          '.technical-data',
+          '.specifications'
+        ];
+        
+        specificSelectors.forEach(selector => {
+          const element = document.querySelector(selector);
+          if (element) {
+            element.querySelectorAll('*').forEach(el => {
+              const txt = (el.textContent || '').trim();
+              const idx = txt.indexOf(':');
+              if (idx > 0 && idx < 100) {
+                const key = txt.slice(0, idx);
+                const val = txt.slice(idx + 1);
+                if (val && /\d|\w/.test(val)) {
+                  add(data, key, val);
+                }
+              }
+            });
+          }
+        });
+        
         return data;
       });
 
+      // Enhanced data mapping with multiple fallbacks
       function pick(keyContains) {
-        const keys = Object.keys(kvPairs||{});
+        const keys = Object.keys(extractedData || {});
         for (const k of keys) {
           const low = k.toLowerCase();
           let ok = true;
           for (const needle of keyContains) {
-            if (!low.includes(needle)) { ok = false; break; }
+            if (!low.includes(needle)) {
+              ok = false;
+              break;
+            }
           }
-          if (ok) return kvPairs[k];
+          if (ok) return extractedData[k];
         }
         return null;
       }
 
-      const weitere = pick(['weitere','artikelnummer']) || pick(['additional','material','number']) || pick(['part','number']);
+      // Extract "Weitere Artikelnummer"
+      const weitere = pick(['weitere', 'artikelnummer']) || 
+                     pick(['additional', 'material', 'number']) || 
+                     pick(['part', 'number']) ||
+                     pick(['artikel', 'nummer']);
       if (weitere) result['Weitere Artikelnummer'] = weitere;
 
-      const abm = pick(['abmess']) || pick(['dimension']);
+      // Extract dimensions
+      const abm = pick(['abmess']) || 
+                  pick(['dimension']) || 
+                  pick(['länge', 'breite', 'höhe']) ||
+                  pick(['length', 'width', 'height']);
       if (abm) result.Abmessung = abm;
 
-      const gew = pick(['gewicht']) || pick(['weight']);
+      // Extract weight
+      const gew = pick(['gewicht']) || 
+                  pick(['weight']) || 
+                  pick(['masse']);
       if (gew) result.Gewicht = gew;
 
-      const werk = pick(['werkstoff']) || (pick(['material']) && !pick(['material','klass']));
+      // Extract material
+      const werk = pick(['werkstoff']) || 
+                   (pick(['material']) && !pick(['material', 'klass'])) ||
+                   pick(['stoff']);
       if (werk) result.Werkstoff = werk;
 
-      const klass = pick(['material','klass']) || pick(['material','class']);
+      // Extract material classification
+      const klass = pick(['material', 'klass']) || 
+                    pick(['material', 'class']) ||
+                    pick(['klassifizierung']);
       if (klass) result.Materialklassifizierung = klass;
 
       result.Status = 'Erfolgreich';
       await page.close();
+      
     } catch (e) {
+      console.error(`Scraping error for ${a2v}:`, e.message);
       result.Status = `Fehler: ${e.message}`;
     }
-    this.cache.set(key, result);
+    
     return result;
-  }
-
-  async scrapeMany(a2vList, concurrency = SCRAPE_CONCURRENCY) {
-    await this.init();
-    const unique = Array.from(new Set(a2vList.filter(Boolean).map(x => String(x).trim())));
-    const results = new Map();
-    let idx = 0;
-
-    const worker = async () => {
-      while (idx < unique.length) {
-        const my = idx++;
-        const id = unique[my];
-        const r = await this.scrapeOne(id);
-        results.set(id, r);
-      }
-    };
-    await Promise.all(Array.from({length: Math.max(1, concurrency)}, () => worker()));
-    return results;
   }
 }
 const scraper = new SiemensProductScraper();
 
-// ---- Helpers ----
+// ---- Helpers for comparison & row building ----
 const COLS = { Z:'Z', E:'E', C:'C', S:'S', U:'U', V:'V', W:'W', P:'P', N:'N' };
 const HEADER_ROW = 3;
 const FIRST_DATA_ROW = 4;
 
+function cell(worksheet, col, row) { return worksheet.getCell(`${col}${row}`); }
+
 function statusCellFill(status) {
-  if (status === 'GREEN') return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFD5F4E6' } };
-  if (status === 'RED')   return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFDEAEA' } };
-  return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF3CD' } };
+  if (status === 'GREEN') return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFD5F4E6' } }; // green-ish
+  if (status === 'RED')   return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFDEAEA' } }; // red-ish
+  return { type:'pattern', pattern:'solid', fgColor:{ argb:'FFFFF3CD' } }; // orange-ish
 }
 
 function compareText(excel, web) {
@@ -228,7 +283,7 @@ function compareWeight(excelVal, webVal) {
   if (exKg == null && wbKg == null) return { status:'ORANGE', comment:'Beide fehlen' };
   if (exKg == null) return { status:'ORANGE', comment:'Excel fehlt' };
   if (wbKg == null) return { status:'ORANGE', comment:'Web fehlt/unklar' };
-  const ok = withinToleranceKG(exKg, wbKg, WEIGHT_TOL_PCT); // default 0 = strikt
+  const ok = withinToleranceKG(exKg, wbKg, 5);
   const diffPct = ((wbKg - exKg) / Math.max(1e-9, Math.abs(exKg))) * 100;
   return ok
     ? { status:'GREEN', comment:`Δ ${diffPct.toFixed(1)}%` }
@@ -262,33 +317,17 @@ function compareMaterialClass(excelN, webText) {
 
 // ---- Routes ----
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
-app.get('/api/health', (req, res) => res.json({ status:'OK', browser: !!scraper.browser, timestamp: new Date().toISOString() }));
 
-// Single-product scrape for your chat UI
-app.post('/api/scrape', express.json(), async (req, res) => {
-  const { articleNumber } = req.body || {};
-  if (!articleNumber) return res.status(400).json({ success:false, error:'articleNumber fehlt' });
-  try {
-    const a2v = String(articleNumber).trim();
-    const r = await scraper.scrapeOne(a2v);
-    // Shape to expected keys
-    const data = {
-      URL: r.URL,
-      Produkttitel: r.Produkttitel,
-      'Weitere Artikelnummer': r['Weitere Artikelnummer'],
-      Herstellerartikelnummer: a2v,
-      Gewicht: r.Gewicht,
-      Abmessung: r.Abmessung,
-      Werkstoff: r.Werkstoff,
-      Materialklassifizierung: r.Materialklassifizierung
-    };
-    res.json({ success:true, data });
-  } catch (e) {
-    res.status(500).json({ success:false, error: e.message });
-  }
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    service: 'DB Produktvergleich API',
+    browser: scraper.browser ? 'Bereit' : 'Nicht initialisiert',
+    timestamp: new Date().toISOString()
+  });
 });
 
-// Upload
+// File upload
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 /**
@@ -303,29 +342,25 @@ app.post('/api/process-excel', upload.single('file'), async (req, res) => {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(req.file.buffer);
 
-    // --- Pre-scan A2Vs across all sheets for parallel scraping
-    const a2vs = [];
+    // Process every worksheet; only first may have DB layout but we keep 1:1
     for (const ws of wb.worksheets) {
-      const last = ws.lastRow?.number || 0;
-      for (let r = FIRST_DATA_ROW; r <= last; r++) {
-        const a2v = ws.getCell(`${COLS.Z}${r}`).value;
-        if (a2v && String(a2v).toUpperCase().startsWith('A2V')) a2vs.push(String(a2v).trim());
-      }
-    }
-    const resultsMap = await scraper.scrapeMany(a2vs, SCRAPE_CONCURRENCY);
-
-    // --- Now mutate sheets bottom-up
-    for (const ws of wb.worksheets) {
+      // Determine last row with data by scanning column C or Z
       let lastRow = ws.lastRow?.number || 0;
+      // ensure header row exists
       if (lastRow < HEADER_ROW) continue;
+
+      // Collect products start..end first to avoid index shift
       const products = [];
       for (let r = FIRST_DATA_ROW; r <= lastRow; r++) {
         const anyValue = ['A','B','C','Z'].some(c => ws.getCell(`${c}${r}`).value && String(ws.getCell(`${c}${r}`).value).trim() !== '');
         if (anyValue) products.push(r);
       }
+
+      // Iterate from bottom to top to insert rows
       for (let i = products.length - 1; i >= 0; i--) {
         const r = products[i];
 
+        // Read Excel row fields
         const A2V = ws.getCell(`${COLS.Z}${r}`).value;
         const manufNoExcel = ws.getCell(`${COLS.E}${r}`).value;
         const titleExcel = ws.getCell(`${COLS.C}${r}`).value;
@@ -336,6 +371,7 @@ app.post('/api/process-excel', upload.single('file'), async (req, res) => {
         const werkstoffExcel = ws.getCell(`${COLS.P}${r}`).value;
         const noteExcel = ws.getCell(`${COLS.N}${r}`).value;
 
+        // Scrape if we have A2V
         let webData = {
           URL: a2vUrl(A2V),
           A2V,
@@ -348,21 +384,23 @@ app.post('/api/process-excel', upload.single('file'), async (req, res) => {
           Status: 'Nicht versucht'
         };
         if (A2V && String(A2V).toUpperCase().startsWith('A2V')) {
-          const fromCache = resultsMap.get(String(A2V).trim());
-          if (fromCache) webData = fromCache;
+          webData = await scraper.scrapeProduct(String(A2V).trim());
         }
 
+        // ---- Insert two rows after r ----
         const insertAt = r + 1;
-        ws.spliceRows(insertAt, 0, [null]);
-        ws.spliceRows(insertAt + 1, 0, [null]);
+        ws.spliceRows(insertAt, 0, [null]); // Web-Daten
+        ws.spliceRows(insertAt + 1, 0, [null]); // Vergleich
         const webRow = insertAt;
         const cmpRow = insertAt + 1;
 
+        // Label cells (optional, we leave other cells empty)
+        // Fill Web-Daten row ONLY in allowed columns
         ws.getCell(`${COLS.Z}${webRow}`).value = A2V || '';
         ws.getCell(`${COLS.E}${webRow}`).value = webData['Weitere Artikelnummer'] || '';
         ws.getCell(`${COLS.C}${webRow}`).value = webData.Produkttitel || '';
         ws.getCell(`${COLS.S}${webRow}`).value = webData.Gewicht || '';
-
+        // Dimensions -> split to U/V/W
         const dimParsed = parseDimensionsToLBH(webData.Abmessung);
         if (dimParsed.L != null) ws.getCell(`${COLS.U}${webRow}`).value = dimParsed.L;
         if (dimParsed.B != null) ws.getCell(`${COLS.V}${webRow}`).value = dimParsed.B;
@@ -370,36 +408,46 @@ app.post('/api/process-excel', upload.single('file'), async (req, res) => {
         ws.getCell(`${COLS.P}${webRow}`).value = webData.Werkstoff || '';
         ws.getCell(`${COLS.N}${webRow}`).value = mapMaterialClassificationToExcel(webData.Materialklassifizierung) || '';
 
+        // Comparison row ONLY in allowed columns (set status + short comment, plus background color)
+        // Z (A2V) - direct text compare
         const cmpZ = compareText(A2V || '', webData.A2V || A2V || '');
         ws.getCell(`${COLS.Z}${cmpRow}`).value = cmpZ.comment;
         ws.getCell(`${COLS.Z}${cmpRow}`).fill = statusCellFill(cmpZ.status);
 
+        // E (Herstellerartikelnummer) vs "Weitere Artikelnummer"
         const cmpE = comparePartNo(manufNoExcel || '', webData['Weitere Artikelnummer'] || '');
         ws.getCell(`${COLS.E}${cmpRow}`).value = cmpE.comment;
         ws.getCell(`${COLS.E}${cmpRow}`).fill = statusCellFill(cmpE.status);
 
+        // C (Material-Kurztext) vs Produkttitel
         const cmpC = compareText(titleExcel || '', webData.Produkttitel || '');
         ws.getCell(`${COLS.C}${cmpRow}`).value = cmpC.comment;
         ws.getCell(`${COLS.C}${cmpRow}`).fill = statusCellFill(cmpC.status);
 
+        // S (Gewicht) ±5%
         const cmpS = compareWeight(weightExcel, webData.Gewicht);
         ws.getCell(`${COLS.S}${cmpRow}`).value = cmpS.comment;
         ws.getCell(`${COLS.S}${cmpRow}`).fill = statusCellFill(cmpS.status);
 
+        // U/V/W (L/B/H) vs Abmessungen
         const cmpDim = compareDimensions(lenExcel, widExcel, heiExcel, webData.Abmessung);
         ws.getCell(`${COLS.U}${cmpRow}`).value = cmpDim.comment;
         ws.getCell(`${COLS.U}${cmpRow}`).fill = statusCellFill(cmpDim.status);
+        // leave V/W empty per requirement (only allowed columns may be written; U/V/W are allowed, but we put comment in U)
 
+        // P (Werkstoff)
         const cmpP = compareText(werkstoffExcel || '', webData.Werkstoff || '');
         ws.getCell(`${COLS.P}${cmpRow}`).value = cmpP.comment;
         ws.getCell(`${COLS.P}${cmpRow}`).fill = statusCellFill(cmpP.status);
 
+        // N (Materialklassifizierung mapping)
         const cmpN = compareMaterialClass(noteExcel || '', webData.Materialklassifizierung || '');
         ws.getCell(`${COLS.N}${cmpRow}`).value = cmpN.comment;
         ws.getCell(`${COLS.N}${cmpRow}`).fill = statusCellFill(cmpN.status);
       }
     }
 
+    // Write to buffer and respond
     const out = await wb.xlsx.writeBuffer();
     const fileName = 'DB_Produktvergleich_verarbeitet.xlsx';
     res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -412,8 +460,9 @@ app.post('/api/process-excel', upload.single('file'), async (req, res) => {
   }
 });
 
-process.on('SIGINT', async () => { await scraper.close(); process.exit(0); });
-process.on('SIGTERM', async () => { await scraper.close(); process.exit(0); });
+// graceful shutdown
+process.on('SIGINT', async () => { await scraper.closeBrowser(); process.exit(0); });
+process.on('SIGTERM', async () => { await scraper.closeBrowser(); process.exit(0); });
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
